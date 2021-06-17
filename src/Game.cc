@@ -1,5 +1,39 @@
 #include "Game.h"
 
+Rol::Rol(uint8_t t){
+	type = t;
+	/*
+ 	* Inicialización de las variables del rol
+ 	*/
+	switch(type){
+	case MAGO:
+		vida = M_VIDA;
+		mana = M_MANA;
+		atk = M_ATK;
+		mana_r = M_MR;
+		break;
+	case GUERRERO:
+		vida = G_VIDA;
+		mana = G_MANA;
+		atk = G_ATK;
+		mana_r = G_MR;
+		break;
+	case ASESINO:
+		vida = G_VIDA;
+		mana = G_MANA;
+		atk = G_ATK;
+		mana_r = G_MR;
+		break;
+	case default:
+		
+		break;
+	}
+}
+
+
+
+
+
 // -----------------------------------------------------------------------------
 // -----------------------------------------------------------------------------
 

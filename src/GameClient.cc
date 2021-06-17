@@ -3,12 +3,18 @@
 
 int main(int argc, char **argv)
 {
-    GameClient ec(argv[1], argv[2], argv[3]);
+	if(argc < 4){
+		std::cout << "Usage: <programa> <server adrr> <port addr> <nick-name>\n" <<
+		return -1;
+	}
 
-    std::thread net_thread([&ec](){ ec.net_thread(); });
+    	GameClient ec(argv[1], argv[2], argv[3]);
 
-    ec.login();
+    	//Inicio del thread
+    	std::thread net_thread([&ec](){ ec.net_thread(); });
 
-    ec.input_thread();
+    	ec.login();
+
+    	ec.input_thread();
 }
 
