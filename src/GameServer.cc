@@ -2,9 +2,10 @@
 
 int main(int argc, char **argv)
 {
-    GameServer es(argv[1], argv[2]);
+    	GameServer es(argv[1], argv[2]);
 
-    es.do_messages();
+	//Comienzo del bucle principal del server
+    	es.update();
 
-    return 0;
+    	return 0;
 }

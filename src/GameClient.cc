@@ -4,7 +4,7 @@
 int main(int argc, char **argv)
 {
 	if(argc < 4){
-		std::cout << "Usage: <programa> <server adrr> <port addr> <nick-name>\n" <<
+		std::cout << "Usage: <programa> <server adrr> <port addr> <nick-name>\n"; 
 		return -1;
 	}
 
@@ -13,8 +13,10 @@ int main(int argc, char **argv)
     	//Inicio del thread
     	std::thread net_thread([&ec](){ ec.net_thread(); });
 
+	//Mensaje de inicio de sesión del jugador
     	ec.login();
 
+	//Comienza el thread de lectura de input
     	ec.input_thread();
 }
 

@@ -4,20 +4,43 @@
 #include <vector>
 #include <memory>
 
+//MUTEX Y CONDITION para evitar DDoS
+#include <mutex>
+#include <condition_variable>
+
 #include "Serializable.h"
 #include "Socket.h"
 
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
+
+//Tipos de mensaje
+enum class MessageType
+{
+	LOGIN   = 0,		//Inicio de sesión del jugador
+        LOGOUT  = 1,		//Desconexión del jugador
+	FINISH_ROUND = 2,	//Ronda terminada
+	FINISH_GAME = 4,	//Juego acabado
+	ROLED = 5, 		//Rol escogido
+	COMMAND = 6		//Mensaje de comando
+};
+
 //Tipos de rol
-enum RolType{
+enum class RolType
+{
 	MAGO = 0,
-	GUERRERRO = 1,
+	GUERRERO = 1,
 	ASESINO = 2
-}
+};
+
 //-------CONSTANTES----------//
 //MAX CLIENTS
 #define MAX_CLIENTS 2
+
+//Contador de clientes
+std::condition_variable num_cv;
+std::mutex num_mutex;
+int num_clientes = 0;
 
 //NICK SIZE
 #define NICK_S 10
@@ -25,6 +48,13 @@ enum RolType{
 //MESSAGE SIZE 
 #define BUF_SIZE 5
 
+/*
+ *	VIDA -> Vida inicial 
+ *	MANA -> Mana inicial
+ *	ATK -> Ataque 
+ *	MR -> Mana restaurado por ronda
+ */
+ 
 //MAGO
 #define M_VIDA 100
 #define M_MANA 100
@@ -42,41 +72,17 @@ enum RolType{
 #define A_MANA 100
 #define A_ATK 100
 #define A_MR 10
-/*
- * Clase que guarda los valores del rol 
- * elegido por el jugador
- */
-class Rol : public GameMessage{
-public: 
-	//Constructora
-	Rol(uint8_t t, );
-	
-	virtual void to_bin();
-	virtual void from_bin(char* data);
-
-private:
-	//Vida del personaje
-	int vida = 0;
-	//Mana del personaje
-	int mana = 0;
-	//Ataque del personaje
-	int atk = 0;
-	//Mana que recupera por turno
-	int mana_r = 0;
-	//Tipo del personaje
-	uint8_t type;
-};
 
 /**
- *  Mensaje del protocolo del juego
+ *  Estructura de la serialización del jugador
  *
  *  +-------------------------+
- *  | Tipo: uint8_t           | 0 (login), 1 (mensaje), 2 (logout)
+ *  | Tipo: uint8_t           | Tipo del mensaje
  *  +-------------------------+
  *  | Nick: char[NICK_S]      | Nick incluido el char terminación de cadena '\0'
  *  +-------------------------+
  *  |                         |
- *  | Mensaje: char[BUF_SIZE] | Mensaje incluido el char terminación de cadena '\0'
+ *  | Mensaje: char[BUF_SIZE] | Mensaje enviado al servidor '\0'
  *  |                         |
  *  +-------------------------+
  *  |                         |
@@ -85,20 +91,61 @@ private:
  *  +-------------------------+
  *
  */
+
+/*
+ * Clase que guarda los valores del rol 
+ * elegido por el jugador
+ */
+class Rol : public Serializable
+{
+public:
+	//Tamaño maximo de rol
+	static const size_t ROL_SIZE = sizeof(int) * 4 + sizeof(uint8_t) * 2 + sizeof(char*) * (BUF_SIZE + NICK_S);
+
+	//Constructora
+	Rol();
+	~Rol();
+
+	virtual void to_bin();
+	virtual int from_bin(char* data);
+	
+	//GET-SET
+	std::string getNick() const;
+	MessageType getMsgType() const;
+	RolType getRol() const;
+	int getVida() const;
+	int getMana() const;
+	int getAtk() const;
+	int getManaR() const;
+
+	void setRolType(RolType rt);
+	void setNick(std::string n);
+	void setCommand(std::string c);
+	void setMsgType(MessageType newType);
+private:
+	//Vida del personaje
+	int vida;
+	//Mana del personaje
+	int mana;
+	//Ataque del personaje
+	int atk;
+	//Mana que recupera por turno
+	int mana_r;
+	//Tipo del personaje
+	RolType rol_t;
+	//Tipo de mensaje
+	MessageType type;
+	
+	std::string nick;
+	std::string command;
+};
+
 class GameMessage: public Serializable
 {
 public:
-    	static const size_t MESSAGE_SIZE = sizeof(char) * (BUF_SIZE + NICK_S) 
-			 + sizeof(uint8_t);
+	//Tamaño máximo del mensaje serializable
+    	static const size_t MESSAGE_SIZE = sizeof(char) * (BUF_SIZE + NICK_S) + sizeof(uint8_t);
 
-    	enum MessageType
-    	{
-        	LOGIN   = 0,
-        	MESSAGE = 1,
-        	LOGOUT  = 2,
-		FINISH_ROUND = 3,
-		FINISH_GAME = 4
-   	};
 
     	GameMessage(){};
 
@@ -108,7 +155,7 @@ public:
 
     	int from_bin(char * bobj);
 
-    	uint8_t type;
+    	MessageType type;
 
     	std::string nick;
     	std::string message;
@@ -123,22 +170,16 @@ public:
 class GameServer
 {
 public:
-    	GameServer(const char * s, const char * p): socket(s, p)
-    	{
-        	socket.bind();
-    	};
+    	GameServer(const char * s, const char * p);
 
-    	/**
-     	*  Thread principal del servidor recive mensajes en el socket y
-     	*  lo distribuye a los clientes. Mantiene actualizada la lista de clientes
-     	*/
-    	void do_messages();
+	/* Thread principal del server. Envía mensajes al resto
+ 	* de usuarios y mantiene actualizada la lista
+	* de jugadores. 	
+	*/ 
+    	void update();
 
 private:
-    	/**
-     	*  Lista de clientes conectados al servidor de Chat, representados por
-     	*  su socket
-     	*/
+   	//Listad de los sockets de los clientes
     	std::vector<std::unique_ptr<Socket>> clients;
 
     	/**
@@ -161,10 +202,10 @@ public:
     	 * @param p puerto del servidor
     	 * @param n nick del usuario
     	 */
-    	GameClient(const char * s, const char * p, const char * n):socket(s, p),
-        	nick(n){};
-    
-	void comando();
+    	GameClient(const char * s, const char * p, const char * n);
+   
+ 	//Envía un mensaje de tipo comando al servidor
+	void command();
 
     	/**
      	*  Envía el mensaje de login al servidor
@@ -199,6 +240,6 @@ private:
      	* Nick del usuario
      	*/
     	std::string nick;
-	uint8_t type;
+	Rol rol;	
 };
-
+	
