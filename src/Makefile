@@ -1,5 +1,5 @@
 CC=g++
-CFLAGS=-g -std=c++1y -I.
+CFLAGS=-g -I.
 DEPS = Socket.h Game.h
 OBJ = Socket.o Game.o
 LIBS=-lpthread

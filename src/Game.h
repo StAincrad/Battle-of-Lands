@@ -37,17 +37,15 @@ enum class RolType
 //MAX CLIENTS
 #define MAX_CLIENTS 2
 
-//Contador de clientes
-std::condition_variable num_cv;
-std::mutex num_mutex;
-int num_clientes = 0;
 
 //NICK SIZE
 #define NICK_S 10
 
-//MESSAGE SIZE 
-#define BUF_SIZE 5
+//COMMAND SIZE 
+#define COM_SIZE 5
 
+//SERVER MESSAGE SIZE
+#define SERVER_MSG_SIZE 300 
 /*
  *	VIDA -> Vida inicial 
  *	MANA -> Mana inicial
@@ -100,7 +98,7 @@ class Rol : public Serializable
 {
 public:
 	//Tamaño maximo de rol
-	static const size_t ROL_SIZE = sizeof(int) * 4 + sizeof(uint8_t) * 2 + sizeof(char*) * (BUF_SIZE + NICK_S);
+	static const size_t ROL_SIZE = sizeof(int) * 4 + sizeof(MessageType) * 2 + sizeof(char*) * (COM_SIZE + NICK_S);
 
 	//Constructora
 	Rol();
@@ -144,12 +142,12 @@ class GameMessage: public Serializable
 {
 public:
 	//Tamaño máximo del mensaje serializable
-    	static const size_t MESSAGE_SIZE = sizeof(char) * (BUF_SIZE + NICK_S) + sizeof(uint8_t);
+    	static const size_t MESSAGE_SIZE = sizeof(char) * (SERVER_MSG_SIZE) + sizeof(MessageType);
 
 
-    	GameMessage(){};
+    	GameMessage();
 
-    	GameMessage(const std::string& n, const std::string& m):nick(n),message(m){};
+    	GameMessage(const std::string& m);
 
     	void to_bin();
 
@@ -157,7 +155,6 @@ public:
 
     	MessageType type;
 
-    	std::string nick;
     	std::string message;
 };
 
@@ -186,6 +183,8 @@ private:
      	* Socket del servidor
      	*/
    	Socket socket;
+
+	std::string welcome;
 };
 
 // -----------------------------------------------------------------------------

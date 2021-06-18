@@ -1,5 +1,10 @@
 #include "Game.h"
 
+//Contador de clientes
+std::condition_variable num_cv;
+std::mutex num_mutex;
+int num_clientes = 0;
+
 //----------Clase Rol---------//
 Rol::Rol()
 {
@@ -16,6 +21,7 @@ void Rol::to_bin()
 
 int Rol::from_bin(char* data)
 {
+	return 0;
 }
 
 //-------GET-SET----------//
@@ -96,6 +102,10 @@ void Rol::setMsgType(MessageType newType)
 
 //----------Clase-GameMessage------------// 
 
+GameMessage::GameMessage(){}
+
+GameMessage::GameMessage(const std::string& m) : message(m) {}
+
 void GameMessage::to_bin()
 {
     alloc_data(MESSAGE_SIZE);
@@ -117,7 +127,14 @@ int GameMessage::from_bin(char * bobj)
 }
 
 //-----------Clase-GameServer----------//
-GameServer::GameServer(const char* s, const char* p) : socket(s, p) {}
+GameServer::GameServer(const char* s, const char* p) : socket(s, p) 
+{
+	//Creación del mensaje de Bienvenida
+	welcome = "¡Bienvenido a Battle of Lands!\n" +
+		std::string("Por favor, escoja un rol para luchar por su tierra\n") +
+		std::string("Pulse 'G' para escoger Guerrero\n") +
+		std::string("Pulse 'M' para escoger Mago\nPulse 'A' para escoger Asesino\n\0");
+}
 
 void GameServer::update()
 {
@@ -154,8 +171,20 @@ void GameServer::update()
 		case MessageType::LOGIN:
 			//Se añade el nuevo socket al vector de clientes
 			clients.push_back(std::move(std::make_unique<Socket>(*s)));
+			num_clientes++;
 
-			//Se le envía un mensaje de bienvenida
+			for(auto it = clients.begin(); it != clients.end(); ++it){
+				//Si es el que se acaba de conectar
+				//se le envía el mensaje de bienvenida
+				if(**it == *s)
+				{
+					GameMessage msg;
+					msg.message = welcome;
+					msg.type = MessageType::LOGIN;
+					socket.send(msg, **it);
+				}
+			}
+			
 			//Se le pregunta por el Rol
 			//Cuando responda, el cliente enviará un mensaje de tipo ROLED
 			//para informa de que ha escogido el rol	

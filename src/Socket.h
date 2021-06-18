@@ -65,7 +65,11 @@ public:
      *  Inicializa un Socket copiando los parámetros del socket
      */
     Socket(struct sockaddr * _sa, socklen_t _sa_len):sd(-1), sa(*_sa),
-        sa_len(_sa_len){};
+        sa_len(_sa_len)
+	{
+		sd = socket(sa.sa_family, SOCK_DGRAM, 0);
+		bind();
+	};
 
     virtual ~Socket(){};
 
