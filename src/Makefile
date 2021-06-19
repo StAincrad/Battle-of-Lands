@@ -7,17 +7,17 @@ LIBS=-lpthread
 %.o: %.cc $(DEPS)
 	$(CC) -g -c -o $@ $< $(CFLAGS)
 
-all: cs cc
+all: Server Client
 
-cs: $(OBJ) GameServer.o
+Server: $(OBJ) GameServer.o
 	g++ -o $@ $^ $(CFLAGS) $(LIBS)
 
-cc: $(OBJ) GameClient.o
+Client: $(OBJ) GameClient.o
 	g++ -o $@ $^ $(CFLAGS) $(LIBS)
 
 
 .PHONY: clean
 
 clean:
-	rm -f *.o cs cc
+	rm -f *.o Server Client .Game.h.swp .Game.cc.swp
 

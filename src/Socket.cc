@@ -2,6 +2,7 @@
 
 #include "Serializable.h"
 #include "Socket.h"
+#include "Game.h"
 
 Socket::Socket(const char * address, const char * port):sd(-1)
 {
@@ -42,14 +43,14 @@ int Socket::recv(Serializable &obj, Socket * &sock)
 
     char buffer[MAX_MESSAGE_SIZE];
 
-    ssize_t bytes = ::recvfrom(sd, buffer, MAX_MESSAGE_SIZE, 0, &sa, &sa_len);
-
+    ssize_t bytes = recvfrom(sd, buffer, MAX_MESSAGE_SIZE, 0, &sa, &sa_len);
     if ( bytes <= 0 )
     {
+	std::cerr << "Error al recibir el número de bytes\n";
         return -1;
     }
 
-    if ( sock != 0 )
+    if ( sock == nullptr )
     {
         sock = new Socket(&sa, sa_len);
     }
@@ -74,20 +75,29 @@ int Socket::send(Serializable& obj, const Socket& sock)
 
 bool operator== (const Socket &s1, const Socket &s2)
 {
+	std::cout << "COMPARATOR\n";
     	//Comparar los campos sin_family, sin_addr.s_addr y sin_port
     	//de la estructura sockaddr_in de los Sockets s1 y s2
     	//Retornar false si alguno difiere
-    
+	if(s1.sa.sa_family != s2.sa.sa_family) 
+	{
+		std::cout << "FAMILY !=\n";
+		return false;
+	}
+
 	struct sockaddr_in* s1_aux = (struct sockaddr_in *) &(s1.sa);
 	struct sockaddr_in* s2_aux = (struct sockaddr_in *) &(s2.sa); 
-	
-	if (
-	   s1.sa.sa_family != s2.sa.sa_family ||
-	   s1_aux->sin_addr.s_addr != s2_aux->sin_addr.s_addr ||
-	   s1_aux->sin_port != s2_aux->sin_port
-	   ) 
+	std::cout << "ADDR == \n";	
+	if (s1_aux->sin_addr.s_addr != s2_aux->sin_addr.s_addr)
+	{
+		std::cout << "ADDR !=\n";
 		return false;
-
+	}
+	if(s1_aux->sin_port != s2_aux->sin_port)
+	{ 
+		std::cout << "PORT !=\n";
+		return false;
+	}
 	return true;
 };
 

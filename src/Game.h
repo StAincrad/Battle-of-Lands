@@ -11,6 +11,7 @@
 #include "Serializable.h"
 #include "Socket.h"
 
+class Player;
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 
@@ -20,9 +21,10 @@ enum class MessageType
 	LOGIN   = 0,		//Inicio de sesión del jugador
         LOGOUT  = 1,		//Desconexión del jugador
 	FINISH_ROUND = 2,	//Ronda terminada
-	FINISH_GAME = 4,	//Juego acabado
-	ROLED = 5, 		//Rol escogido
-	COMMAND = 6		//Mensaje de comando
+	FINISH_GAME = 3,	//Juego acabado
+	ROLED = 4, 		//Rol escogido
+	COMMAND = 5,		//Mensaje de comando
+	NONE = 6,		//Tipo vacío
 };
 
 //Tipos de rol
@@ -30,13 +32,13 @@ enum class RolType
 {
 	MAGO = 0,
 	GUERRERO = 1,
-	ASESINO = 2
+	ASESINO = 2,
+	NONE = 3	//Rol vacío
 };
 
 //-------CONSTANTES----------//
 //MAX CLIENTS
 #define MAX_CLIENTS 2
-
 
 //NICK SIZE
 #define NICK_S 10
@@ -46,6 +48,7 @@ enum class RolType
 
 //SERVER MESSAGE SIZE
 #define SERVER_MSG_SIZE 300 
+
 /*
  *	VIDA -> Vida inicial 
  *	MANA -> Mana inicial
@@ -91,21 +94,23 @@ enum class RolType
  */
 
 /*
- * Clase que guarda los valores del rol 
- * elegido por el jugador
+ * Clase de mensajería del rol elegido por el jugador.
+ * Sirve para enviar toda la información que tiene guardada
+ * el jugador.
  */
 class Rol : public Serializable
 {
 public:
 	//Tamaño maximo de rol
-	static const size_t ROL_SIZE = sizeof(int) * 4 + sizeof(MessageType) * 2 + sizeof(char*) * (COM_SIZE + NICK_S);
+	static const size_t ROL_SIZE = sizeof(int) * 4 + sizeof(MessageType) + sizeof(char*) * COM_SIZE + sizeof(char) * NICK_S + sizeof(RolType);
 
-	//Constructora
+	//Constructora por defecto
 	Rol();
-	~Rol();
+	//Constructora desde player
+	Rol(Player * p, const MessageType& t);
 
 	virtual void to_bin();
-	virtual int from_bin(char* data);
+	virtual int from_bin(char* bobj);
 	
 	//GET-SET
 	std::string getNick() const;
@@ -116,10 +121,10 @@ public:
 	int getAtk() const;
 	int getManaR() const;
 
-	void setRolType(RolType rt);
-	void setNick(std::string n);
-	void setCommand(std::string c);
-	void setMsgType(MessageType newType);
+	void setRolType(const RolType& rt);
+	void setNick(const std::string& n);
+	void setCommand(const std::string& c);
+	void setMsgType(const MessageType& newType);
 private:
 	//Vida del personaje
 	int vida;
@@ -176,8 +181,10 @@ public:
     	void update();
 
 private:
-   	//Listad de los sockets de los clientes
-    	std::vector<std::unique_ptr<Socket>> clients;
+   	//Socket de los clientes
+	std::unique_ptr<Socket> clients[MAX_CLIENTS];
+	std::unique_ptr<Socket> client1;
+	std::unique_ptr<Socket> client2;
 
     	/**
      	* Socket del servidor
@@ -190,8 +197,75 @@ private:
 // -----------------------------------------------------------------------------
 // -----------------------------------------------------------------------------
 
+/*
+ * Clase para guardar toda la información del jugador
+ * Así como para tratar el envío de mensajes
+ */
+class Player
+{
+public:
+	Player(const char * s, const char * p, const char * n);
+	
+	/*
+	 * Envía un mensaje de tipo COMMAND al server
+	 */
+	void command();
+	
+	/*
+	 * Envía un mensaje de tipo LOGIN al server
+	 */
+	void login();
+	
+
+	/*
+	 * Envía un mensaje de tipo LOGOUT al server
+	 */
+	void logout();
+
+	//----------SET-----------//
+	/*
+	 * Asignación del rol
+	 */
+	void setRolType(RolType rt);
+	
+	/*
+	 * Cambia la vida en función de v
+	 */
+	void addVida(int v);
+	
+	/*
+	 * Cambia el maná en función de mana_r
+	 */
+	void addMana();
+	
+	//-----------GET--------------//
+	std::string getNick() const;
+
+	RolType getRol() const;
+	
+	int getVida() const;
+
+	int getMana() const;
+
+	int getAtk() const;
+
+	int getManaR() const;
+
+	Socket* getSocket();
+private:
+	Socket socket;
+	std::string nick;
+
+	//Stats del jugador
+	int vida;	//Vida
+	int mana;	//Mana
+	int atk;	//Ataque
+	int mana_r;	//Recuperación maná por ronda
+	RolType type;	//Tipo de rol
+};
+
 /**
- *  Clase para el cliente de juego
+ *  Clase para el juego del cliente
  */
 class GameClient
 {
@@ -202,19 +276,11 @@ public:
     	 * @param n nick del usuario
     	 */
     	GameClient(const char * s, const char * p, const char * n);
-   
- 	//Envía un mensaje de tipo comando al servidor
-	void command();
+	
+	~GameClient();
 
-    	/**
-     	*  Envía el mensaje de login al servidor
-     	*/
-    	void login();
-
-    	/**
-     	*  Envía el mensaje de logout al servidor
-     	*/
-    	void logout();
+	//Envía el mensaje de login
+	void login();
 
     	/**
      	*  Rutina principal para el Thread de E/S. Lee datos de STDIN (std::getline)
@@ -229,16 +295,7 @@ public:
     	void net_thread();
 
 private:
-
-    	/**
-     	* Socket para comunicar con el servidor
-     	*/
-    	Socket socket;
-
-    	/**
-     	* Nick del usuario
-     	*/
-    	std::string nick;
-	Rol rol;	
+	//Puntero a los datos del jugador
+	Player* player;
 };
 	
