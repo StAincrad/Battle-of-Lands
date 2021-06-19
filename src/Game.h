@@ -20,11 +20,12 @@ enum class MessageType
 {
 	LOGIN   = 0,		//Inicio de sesión del jugador
         LOGOUT  = 1,		//Desconexión del jugador
-	FINISH_ROUND = 2,	//Ronda terminada
-	FINISH_GAME = 3,	//Juego acabado
-	ROLED = 4, 		//Rol escogido
-	COMMAND = 5,		//Mensaje de comando
-	NONE = 6,		//Tipo vacío
+	INIT_BATTLE = 2,	//Pasa al estado de batalla
+	FINISH_ROUND = 3,	//Ronda terminada
+	FINISH_GAME = 4,	//Juego acabado
+	ROLED = 5, 		//Rol escogido
+	COMMAND = 6,		//Mensaje de comando
+	NONE = 7,		//Tipo vacío
 };
 
 //Tipos de rol
@@ -34,6 +35,16 @@ enum class RolType
 	GUERRERO = 1,
 	ASESINO = 2,
 	NONE = 3	//Rol vacío
+};
+
+enum class GameState
+{
+	CHOOSEN = 0, 	//Escogiendo el rol
+	MAINLOOP = 1,	//Loop principal
+	WAITING = 2,	//Esperando otro jugador
+	FINISH = 3,	//Partida acabada
+
+	NONE = 4	
 };
 
 //-------CONSTANTES----------//
@@ -181,17 +192,37 @@ public:
     	void update();
 
 private:
+	struct ClientSocket
+	{
+		std::string nick;
+		std::unique_ptr<Socket> socket;
+	};
+
    	//Socket de los clientes
 	std::unique_ptr<Socket> clients[MAX_CLIENTS];
-	std::unique_ptr<Socket> client1;
-	std::unique_ptr<Socket> client2;
+	ClientSocket client1;
+	ClientSocket client2;
+	
+	//Determina el número de jugadores que han escogido rol
+	int roledPlayers;
 
+	//Numero de clientes actual
+	int num_clientes;
     	/**
      	* Socket del servidor
      	*/
    	Socket socket;
 
 	std::string welcome;
+
+	//Administra el estado del juego en el server
+	GameState state;
+	
+	//Gestiona los mensajes de LOGIN
+	void manageLogin(Rol& rol, Socket* s);
+
+	//Gestiona los mensajes de ROLED
+	void manageRoled(Rol& rol, Socket* s);
 };
 
 // -----------------------------------------------------------------------------
@@ -297,5 +328,11 @@ public:
 private:
 	//Puntero a los datos del jugador
 	Player* player;
+
+	//Administra el estado del juego en el cliente
+	GameState state;
+	
+	void chooseRol(std::string msg);
+	void chooseAction(std::string msg);
 };
 	
