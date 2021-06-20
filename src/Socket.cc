@@ -73,6 +73,16 @@ int Socket::send(Serializable& obj, const Socket& sock)
 	return 0;
 }
 
+int Socket::finish()
+{
+	int c = close(sd);
+	if(c == -1){
+		std::cerr << "Error al cerrar fd\n";
+	}
+
+	return c;
+}
+
 bool operator== (const Socket &s1, const Socket &s2)
 {
 	std::cout << "COMPARATOR\n";

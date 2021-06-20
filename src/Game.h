@@ -192,6 +192,7 @@ public:
     	void update();
 
 private:
+	//Datos de los clientes
 	struct ClientSocket
 	{
 		Rol stats;
@@ -201,24 +202,23 @@ private:
 
    	//Socket de los clientes
 	ClientSocket clients[MAX_CLIENTS];
-	ClientSocket client1;
-	ClientSocket client2;
 	
 	//Determina el número de jugadores que han escogido rol
 	int roledPlayers;
 
 	//Numero de clientes actual
 	int num_clientes;
-    	/**
-     	* Socket del servidor
-     	*/
+
+    	//Socket del server
    	Socket socket;
 
 	//Mensaje de bienvenida
 	std::string welcome;
 	//Mensaje con los comandos del juego
 	std::string commands;
-
+	//Array con los nicks de los jgadores
+	//para evitar coger el mismo
+	std::string nicks[MAX_CLIENTS];
 	//Administra el estado del juego en el server
 	GameState state;
 	
@@ -333,8 +333,10 @@ public:
     	void net_thread();
 
 private:
-	//Controla los bucles
+	//Controla el bucle de net_thread
 	bool exit;
+	//Controla el bucle de input_trhead
+	bool exit_i;
 
 	//Puntero a los datos del jugador
 	Player* player;

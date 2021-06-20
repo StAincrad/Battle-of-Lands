@@ -417,8 +417,19 @@ void GameServer::manageLogout(Rol& rol, Socket* s)
 		{
 			num_clientes--;
 			clients[i].used = false;
-			Socket* delSocket = clients[i].socket.release();
-			delete delSocket;
+			std::cout << "CLIENT FALSE\n";
+
+			//Mensaje de despedida
+			GameMessage msg;
+			msg.type = MessageType::LOGOUT;
+			msg.message = "Hasta la vida\n";
+			socket.send(msg, *clients[i].socket);
+			
+			std::cout << "ENVIO DE LOGOUT\n";
+			//Liberación del socket
+			clients[i].socket = nullptr;
+			std::cout << "LIBERACION DE SOCKET\n";
+			
 			break;
 		}
 	}
@@ -456,10 +467,13 @@ void Player::login()
 void Player::logout()
 {
 	//Funciona igual que el LOGIN
-	std::string c;
-	//rol.setMsgType(MessageType::LOGOUT);
-	//rol.setCommand(c);
-	//socket.send(rol, socket);
+	Rol rol = Rol(this, MessageType::LOGOUT);
+	int send = socket.send(rol, socket);
+	if(send == -1){
+		std::cerr << "Error en LOGOUT\n";
+	}
+
+	std::cout << "LOGOUT ENVIADO\n";
 }
 
 void Player::setRolType(RolType rt)
@@ -533,7 +547,9 @@ Socket* Player::getSocket()
 }
 //--------Clase-GameClient-------------//
 
-GameClient::GameClient(const char* s, const char* p, const char* n) : exit(false)
+GameClient::GameClient(const char* s, const char* p, const char* n) : 
+	exit(false),
+	exit_i(false)
 {
 	//Creación del player en el juego del cliente
 	player = new Player(s, p, n);
@@ -549,7 +565,7 @@ void GameClient::login(){
 
 void GameClient::input_thread()
 {
-	while (!exit)
+	while (!exit_i)
     	{
 		Socket* socket = player->getSocket();
 
@@ -583,7 +599,7 @@ void GameClient::input_thread()
 
 void GameClient::net_thread()
 {
-    	while(!exit)
+    	while(!exit_i)
     	{
 		GameMessage m;
 		player->getSocket()->recv(m);
@@ -627,7 +643,12 @@ void GameClient::net_thread()
 			state = GameState::FINISH;
 			break;
 		case MessageType::LOGOUT:
+			std::cout << "EXIT TRUE\n";
 			exit = true;
+			Socket * delS = player->getSocket();
+			delS->finish();
+
+			delete player;
 			break;
 		}
     	}
@@ -671,7 +692,14 @@ void GameClient::chooseRol(std::string msg)
 void GameClient::chooseAction(std::string msg)
 {
 	Socket* socket = player->getSocket();
-	
+	if(msg == "S")
+	{
+		exit_i = true;
+		player->logout();
+	}
+	else{
+		std::cout << "No se reconoce el comando\n";
+	}
 
 	state = GameState::WAITING;
 }

@@ -3,6 +3,7 @@
 
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <unistd.h>
 #include <netdb.h>
 
 #include <iostream>
@@ -111,7 +112,8 @@ public:
     {
         return ::bind(sd, (const struct sockaddr *) &sa, sa_len);
     }
-
+	
+    int finish();
     friend std::ostream& operator<<(std::ostream& os, const Socket& dt);
 
     friend bool operator== (const Socket &s1, const Socket &s2);
