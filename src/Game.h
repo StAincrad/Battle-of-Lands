@@ -40,7 +40,7 @@ enum class RolType
 enum class GameState
 {
 	CHOOSEN = 0, 	//Escogiendo el rol
-	MAINLOOP = 1,	//Loop principal
+	BATTLE = 1,	//Escogiendo siguiente ataque
 	WAITING = 2,	//Esperando otro jugador
 	FINISH = 3,	//Partida acabada
 
@@ -58,7 +58,7 @@ enum class GameState
 #define COM_SIZE 5
 
 //SERVER MESSAGE SIZE
-#define SERVER_MSG_SIZE 300 
+#define SERVER_MSG_SIZE 500
 
 /*
  *	VIDA -> Vida inicial 
@@ -194,12 +194,13 @@ public:
 private:
 	struct ClientSocket
 	{
-		std::string nick;
+		Rol stats;
 		std::unique_ptr<Socket> socket;
+		bool used;
 	};
 
    	//Socket de los clientes
-	std::unique_ptr<Socket> clients[MAX_CLIENTS];
+	ClientSocket clients[MAX_CLIENTS];
 	ClientSocket client1;
 	ClientSocket client2;
 	
@@ -213,7 +214,10 @@ private:
      	*/
    	Socket socket;
 
+	//Mensaje de bienvenida
 	std::string welcome;
+	//Mensaje con los comandos del juego
+	std::string commands;
 
 	//Administra el estado del juego en el server
 	GameState state;
@@ -223,6 +227,9 @@ private:
 
 	//Gestiona los mensajes de ROLED
 	void manageRoled(Rol& rol, Socket* s);
+	
+	//Gestiona los mensajes de LOGOUT
+	void manageLogout(Rol& rol, Socket* s);
 };
 
 // -----------------------------------------------------------------------------
@@ -326,6 +333,9 @@ public:
     	void net_thread();
 
 private:
+	//Controla los bucles
+	bool exit;
+
 	//Puntero a los datos del jugador
 	Player* player;
 
