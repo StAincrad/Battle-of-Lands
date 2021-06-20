@@ -68,22 +68,22 @@ enum class GameState
  */
  
 //MAGO
-#define M_VIDA 100
-#define M_MANA 100
-#define M_ATK 100
-#define M_MR 10
+#define M_VIDA 500
+#define M_MANA 8
+#define M_ATK 20
+#define M_MR 3
 
 //GUERRERO
-#define G_VIDA 100
-#define G_MANA 100
-#define G_ATK 100
-#define G_MR 10
+#define G_VIDA 1000
+#define G_MANA 4
+#define G_ATK 10
+#define G_MR 1
 
 //ASESINO
-#define A_VIDA 100
-#define A_MANA 100
-#define A_ATK 100
-#define A_MR 10
+#define A_VIDA 700
+#define A_MANA 6
+#define A_ATK 20
+#define A_MR 2
 
 /**
  *  Estructura de la serialización del jugador
@@ -125,6 +125,7 @@ public:
 	
 	//GET-SET
 	std::string getNick() const;
+	std::string getCommand() const;
 	MessageType getMsgType() const;
 	RolType getRol() const;
 	int getVida() const;
@@ -136,6 +137,13 @@ public:
 	void setNick(const std::string& n);
 	void setCommand(const std::string& c);
 	void setMsgType(const MessageType& newType);
+	
+	// Cambia la vida en función de v
+	void addVida(int v);
+	
+	//Cambia el maná en función de mana_r
+	void addMana();
+
 private:
 	//Vida del personaje
 	int vida;
@@ -192,6 +200,9 @@ public:
     	void update();
 
 private:
+    	//Socket del server
+   	Socket socket;
+	
 	//Datos de los clientes
 	struct ClientSocket
 	{
@@ -199,28 +210,33 @@ private:
 		std::unique_ptr<Socket> socket;
 		bool used;
 	};
-
    	//Socket de los clientes
 	ClientSocket clients[MAX_CLIENTS];
-	
+
 	//Determina el número de jugadores que han escogido rol
 	int roledPlayers;
-
 	//Numero de clientes actual
 	int num_clientes;
+	//Posicion del enemigo en el array de clientes
+	int enemigo;
+	//Numero de clientes que ya han mandado el comando: va de 0 a 3
+	//(0 = ningun comando enviado; 1 = un comando enviado;
+	//2 = dos comandos enviados; 3 = se ha procesado ya uno de los 
+	//comandos enviados)
+	int num_commands = 0;
 
-    	//Socket del server
-   	Socket socket;
 
 	//Mensaje de bienvenida
 	std::string welcome;
 	//Mensaje con los comandos del juego
 	std::string commands;
-	//Array con los nicks de los jgadores
+	//Guarda el primer comando enviado en el estado de combate
+	std::string firstCommand;
+	//Array con los nicks de los jugadores
 	//para evitar coger el mismo
 	std::string nicks[MAX_CLIENTS];
-	//Administra el estado del juego en el server
-	GameState state;
+	
+	//--------METODOS-PRIVADOS------------//
 	
 	//Gestiona los mensajes de LOGIN
 	void manageLogin(Rol& rol, Socket* s);
@@ -230,14 +246,22 @@ private:
 	
 	//Gestiona los mensajes de LOGOUT
 	void manageLogout(Rol& rol, Socket* s);
+
+	//Gestiona los comandos
+	void manageCommand(Rol& rol, Socket* s);
+
+	//Devuelve el informe de batalla
+	std::string informeEnemigo(const int& i);
+	std::string informe(const int& i);
 };
 
 // -----------------------------------------------------------------------------
 // -----------------------------------------------------------------------------
 
 /*
- * Clase para guardar toda la información del jugador
- * Así como para tratar el envío de mensajes
+ * Clase para guardar toda la información inicial del jugador.
+ * Sirve para guardar el rol inicial y enviarselo al servidor 
+ * para que guarde los datos
  */
 class Player
 {
@@ -266,16 +290,7 @@ public:
 	 */
 	void setRolType(RolType rt);
 	
-	/*
-	 * Cambia la vida en función de v
-	 */
-	void addVida(int v);
-	
-	/*
-	 * Cambia el maná en función de mana_r
-	 */
-	void addMana();
-	
+		
 	//-----------GET--------------//
 	std::string getNick() const;
 
@@ -344,7 +359,7 @@ private:
 	//Administra el estado del juego en el cliente
 	GameState state;
 	
-	void chooseRol(std::string msg);
-	void chooseAction(std::string msg);
+	void chooseRol(const std::string& msg);
+	void chooseAction(const std::string& msg);
 };
 	
