@@ -21,11 +21,10 @@ enum class MessageType
 	LOGIN   = 0,		//Inicio de sesión del jugador
         LOGOUT  = 1,		//Desconexión del jugador
 	INIT_BATTLE = 2,	//Pasa al estado de batalla
-	FINISH_ROUND = 3,	//Ronda terminada
-	FINISH_GAME = 4,	//Juego acabado
-	ROLED = 5, 		//Rol escogido
-	COMMAND = 6,		//Mensaje de comando
-	NONE = 7,		//Tipo vacío
+	FINISH_GAME = 3,	//Juego acabado
+	ROLED = 4, 		//Rol escogido
+	COMMAND = 5,		//Mensaje de comando
+	NONE = 6,		//Tipo vacío
 };
 
 //Tipos de rol
@@ -68,21 +67,21 @@ enum class GameState
  */
  
 //MAGO
-#define M_VIDA 500
+#define M_VIDA 400
 #define M_MANA 8
-#define M_ATK 20
+#define M_ATK 40
 #define M_MR 3
 
 //GUERRERO
-#define G_VIDA 1000
+#define G_VIDA 1300
 #define G_MANA 4
-#define G_ATK 10
+#define G_ATK 15
 #define G_MR 1
 
 //ASESINO
 #define A_VIDA 700
 #define A_MANA 6
-#define A_ATK 20
+#define A_ATK 25
 #define A_MR 2
 
 /**
@@ -113,7 +112,7 @@ class Rol : public Serializable
 {
 public:
 	//Tamaño maximo de rol
-	static const size_t ROL_SIZE = sizeof(int) * 4 + sizeof(MessageType) + sizeof(char*) * COM_SIZE + sizeof(char) * NICK_S + sizeof(RolType);
+	static const size_t ROL_SIZE = sizeof(int) * 5 + sizeof(MessageType) + sizeof(char*) * COM_SIZE + sizeof(char) * NICK_S + sizeof(RolType);
 
 	//Constructora por defecto
 	Rol();
@@ -141,14 +140,18 @@ public:
 	// Cambia la vida en función de v
 	void addVida(int v);
 	
-	//Cambia el maná en función de mana_r
-	void addMana();
+	//Cambia el maná en función de m
+	void addMana(int m);
 
+	//Restaura el maná al acabar la ronda en función de mana_r
+	void reloadMana();
 private:
 	//Vida del personaje
 	int vida;
 	//Mana del personaje
 	int mana;
+	//Mana maximo del personake
+	int manaMax;
 	//Ataque del personaje
 	int atk;
 	//Mana que recupera por turno
@@ -160,6 +163,11 @@ private:
 	
 	std::string nick;
 	std::string command;
+
+	//Serializa los stats
+	void seriStats(char* tmp);
+	//Deserializa los stats
+	void deseriStats(char* tmp);
 };
 
 class GameMessage: public Serializable
@@ -224,7 +232,8 @@ private:
 	//2 = dos comandos enviados; 3 = se ha procesado ya uno de los 
 	//comandos enviados)
 	int num_commands = 0;
-
+	//Porcentaje del daño mitigado
+	float m_dmg = 0.3;
 
 	//Mensaje de bienvenida
 	std::string welcome;
@@ -250,6 +259,14 @@ private:
 	//Gestiona los comandos
 	void manageCommand(Rol& rol, Socket* s);
 
+	//Gestiona la fase de combate en función de los comandos de los juagadores
+	//current -> jugador al que se le procesa el comando
+	//enemigo -> el otro jugador
+	void manageBattle(const int& current, const int& enemigo);
+
+	//Devuelve el string del rol
+	std::string printRol(const RolType& t);
+
 	//Devuelve el informe de batalla
 	std::string informeEnemigo(const int& i);
 	std::string informe(const int& i);
@@ -260,8 +277,8 @@ private:
 
 /*
  * Clase para guardar toda la información inicial del jugador.
- * Sirve para guardar el rol inicial y enviarselo al servidor 
- * para que guarde los datos
+ * Sirve para escoger el rol inicial y enviarselo al servidor 
+ * para que guarde los stats.
  */
 class Player
 {
@@ -359,7 +376,11 @@ private:
 	//Administra el estado del juego en el cliente
 	GameState state;
 	
+	//Procesa el comando para escoger rol
 	void chooseRol(const std::string& msg);
+	//Procesa el comando para elegir una acción de batalla
 	void chooseAction(const std::string& msg);
+	//Procesa el comando cuando acaba la partida
+	void chooseFinish(const std::string& msg);
 };
 	

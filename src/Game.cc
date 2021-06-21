@@ -16,6 +16,7 @@ Rol::Rol(Player * p, const MessageType& t) : type(t)
 	//Inicialización de variables en función del player
 	vida = p->getVida();
 	mana = p->getMana();
+	manaMax = mana;
 	atk = p->getAtk();
 	mana_r = p->getManaR();
 	nick = p->getNick();
@@ -44,20 +45,19 @@ void Rol::to_bin()
 	tmp += sizeof(char) * NICK_S;
 	
 	//Alojamiento del comando
-	memcpy(tmp, command.c_str(), sizeof(char) * COM_SIZE);
-	tmp += sizeof(char) * COM_SIZE;
+	//Solo se serializa el string command
+	//cuando se envíen comandos en GameState::BATTLE
+	if(type == MessageType::COMMAND)
+	{
+		memcpy(tmp, command.c_str(), sizeof(char) * COM_SIZE);
+		tmp += sizeof(char) * COM_SIZE;
+	}
 
 	//Alojamiento de los stats restantes
-	memcpy(tmp, &vida, sizeof(int));
-	tmp += sizeof(int);
-	
-	memcpy(tmp, &mana, sizeof(int));
-	tmp += sizeof(int);
-	
-	memcpy(tmp, &atk, sizeof(int));
-	tmp += sizeof(int);
-	
-	memcpy(tmp, &mana_r, sizeof(int));
+	//Solo se serializan los stats cuando se escoge el rol
+	if(type == MessageType::ROLED){
+		seriStats(tmp);
+	}
 }
 
 int Rol::from_bin(char* bobj)
@@ -78,26 +78,56 @@ int Rol::from_bin(char* bobj)
 	//Nick de usuario
 	nick = tmp;
 	tmp += sizeof(char) * NICK_S;
+	
+	//Comando -> mismo caso que en seri
+	if(type == MessageType::COMMAND)
+	{
+		command = tmp;
+		tmp += sizeof(char) * COM_SIZE;
+	}
 
-	//Comando
-	command = tmp;
-	tmp += sizeof(char) * COM_SIZE;
+	//Stats -> mismo caso que en seri
+	if(type == MessageType::ROLED)
+	{
+		deseriStats(tmp);
+	}
 
-	//Stats
+	return 0;
+}
+
+void Rol::deseriStats(char* tmp)
+{
 	memcpy(&vida, tmp, sizeof(int));
 	tmp += sizeof(int);
 	
 	memcpy(&mana, tmp, sizeof(int));
 	tmp += sizeof(int);
 	
+	memcpy(&manaMax, tmp, sizeof(int));
+	tmp += sizeof(int);
+	
 	memcpy(&atk, tmp, sizeof(int));
 	tmp += sizeof(int);
 	
-	memcpy(&mana_r, tmp, sizeof(int));
-	
-	return 0;	
+	memcpy(&mana_r, tmp, sizeof(int));	
 }
 
+void Rol::seriStats(char * tmp)
+{
+	memcpy(tmp, &vida, sizeof(int));
+	tmp += sizeof(int);
+	
+	memcpy(tmp, &mana, sizeof(int));
+	tmp += sizeof(int);
+	
+	memcpy(tmp, &manaMax, sizeof(int));
+	tmp += sizeof(int);
+	
+	memcpy(tmp, &atk, sizeof(int));
+	tmp += sizeof(int);
+	
+	memcpy(tmp, &mana_r, sizeof(int));
+}
 //Get // SET
 std::string Rol::getCommand() const
 {
@@ -134,7 +164,7 @@ int Rol::getAtk() const
 	return atk;
 }
 
-int Rol::getManaR() const
+int Rol::getManaR() const 
 {
 	return mana_r;
 }
@@ -159,10 +189,17 @@ void Rol::addVida(int v)
 	vida += v;
 }
 
-void Rol::addMana() 
+void Rol::addMana(int m) 
+{
+	mana += m;
+}
+
+void Rol::reloadMana()
 {
 	mana += mana_r;
+	if(mana > manaMax) mana = manaMax;
 }
+
 //----------Clase-GameMessage------------// 
 
 GameMessage::GameMessage(){}
@@ -224,6 +261,8 @@ GameServer::GameServer(const char* s, const char* p) :
 	//Iniciamos los clientes como no usados
 	clients[0].used = false;
 	clients[1].used = false;
+
+	nicks[0] = nicks[1] = "none";
 }
 
 void GameServer::update()
@@ -257,14 +296,10 @@ void GameServer::update()
 		
 		switch(rol.getMsgType()){
 		case MessageType::LOGIN:
-			if(num_clientes >= MAX_CLIENTS) break;
-			
 			manageLogin(rol, s);
 			break;
 		case MessageType::LOGOUT:
 			manageLogout(rol, s);
-			break;
-		case MessageType::FINISH_ROUND:
 			break;
 		case MessageType::FINISH_GAME:
 			break;
@@ -281,6 +316,25 @@ void GameServer::update()
 //PRIVADOS
 void GameServer::manageLogin(Rol& rol, Socket *s)
 {
+	//Validez del login
+	if(num_clientes == MAX_CLIENTS){
+		GameMessage msg;
+		msg.message = "\nNo hay hueco en el servidor\n";
+		msg.type = MessageType::LOGOUT;
+		socket.send(msg, *s);
+	       	return;
+	}
+	else if(rol.getNick() == nicks[0] ||
+			rol.getNick() == nicks[1])
+	{
+		GameMessage msg;
+		msg.message = "\n El nombre " + std::string(rol.getNick()) +
+			std::string(" no es válido.");
+		msg.type = MessageType::LOGOUT;
+		socket.send(msg, *s);
+		return;
+	}
+
 	//Se añade el nuevo socket al vector de clientes
 	std::cout << "\n" << rol.getNick() << " ha entrado en el juego\n";
 	
@@ -294,6 +348,7 @@ void GameServer::manageLogin(Rol& rol, Socket *s)
 		if(!clients[i].used){
 			clients[i].used = true;
 			clients[i].stats = rol;
+			nicks[i] = rol.getNick();
 			clients[i].socket = std::move(std::move(std::make_unique<Socket>(*s)));
 			socket.send(msg, *clients[i].socket);
 
@@ -308,7 +363,7 @@ void GameServer::manageRoled(Rol& rol, Socket* s)
 {
 	//El mensaje siempre será de GameMessage
 	std::cout << rol.getNick() << " ha escogido " <<
-	      	(int)rol.getRol() << "\n";
+	      	printRol(rol.getRol()) << "\n";
 	
 	GameMessage msg;
 	
@@ -317,19 +372,14 @@ void GameServer::manageRoled(Rol& rol, Socket* s)
 		//Cuando el jugador escoge rol, se guardan sus datos en el server
 		if(rol.getNick() == clients[i].stats.getNick()){
 			clients[i].stats = rol;
-			msg.message = "Ha escogido: ";
 			msg.type = MessageType::ROLED;
-			if(clients[i].stats.getRol() == RolType::GUERRERO){
-				msg.message += std::string("Guerrero\n");
-			}
-			else if(clients[i].stats.getRol() == RolType::MAGO){
-				msg.message += std::string("Mago\n");
-			}
-			else if(clients[i].stats.getRol() == RolType::ASESINO){
-				msg.message += std::string("Asesino\n");
-			}
+			
+			msg.message = "Ha escogido: ";
+			msg.message += printRol(clients[i].stats.getRol());
+			msg.message += "\n";
 
 			roledPlayers++;
+
 			//Envío del rol escogido al jugador
 			socket.send(msg, *s);
 			break;
@@ -338,8 +388,6 @@ void GameServer::manageRoled(Rol& rol, Socket* s)
 	
 	//Si aún no han llegado otros jugadores
 	if(roledPlayers < MAX_CLIENTS){
-		msg.message = std::string("\nEsperando rival...\n");
-		socket.send(msg, *s);
 	       	return;
 	}
 			
@@ -368,6 +416,8 @@ void GameServer::manageRoled(Rol& rol, Socket* s)
 		msg.message += commands;
 		socket.send(msg, *clients[i].socket);
 	}	
+
+	roledPlayers = 0;
 }
 
 void GameServer::manageLogout(Rol& rol, Socket* s)
@@ -418,11 +468,9 @@ void GameServer::manageCommand(Rol& rol, Socket* s)
 	}
 
 	//Comprobación de que si es ataque fuerte se disponga del maná necesario
-	if(clients[i].stats.getCommand()[0] == 'F' &&
-	   (int)(clients[i].stats.getCommand()[2] - '0') > clients[i].stats.getMana())
+	if(rol.getCommand()[0] == 'F' &&
+	   (int)(rol.getCommand()[2] - '0') > clients[i].stats.getMana())
 	{
-		std::cout << "MANA ENTRANTE: " << 
-			clients[i].stats.getCommand()[2] - '0' << std::endl;;
 		msg.message = "\nNo hay maná suficiente para efectuar el ataque\n";
 		msg.message += std::string("Su maná: ") +
 		       	std::to_string(clients[i].stats.getMana());
@@ -447,41 +495,17 @@ void GameServer::manageCommand(Rol& rol, Socket* s)
 	//En este caso el orden del procesamiento de los mensajes nos da igual, dado
 	//que se puede empatar. En caso de que los jugadores bajen por debajo de 0 
 	//se considerará empate.
-	
-	//Procesando al último que envío el mensaje
-	//Si mitiga daño entonces no hace falta entrar aquí
-	if(rol.getCommand() != "M"){
-		if(rol.getCommand() == "B")
-		{
-			int pupa = clients[i].stats.getAtk();
-			if(clients[enemigo].stats.getCommand() == "M")
-			{
-				pupa -= (int)(pupa * 0.1);
-			}
-			clients[enemigo].stats.addVida(-pupa);
-		}
-		else if(rol.getCommand()[0] == 'F')
-		{
-			//Procesamos comando enemigo
-			if(rol.getCommand() == "B")
-			{
-			}
-		}
-		else
-		{	
+	manageBattle(i, enemigo);
+	manageBattle(enemigo, i);
 
-		}
-	}
-
-	//Procesando al otro jugador
-	if(clients[enemigo].stats.getCommand() != "M"){
-		
-	}
+	//Reset de comandos
+	num_commands = 0;
 
 	//Comprobación de vidas
 	//Empate
 	if(clients[i].stats.getVida() <= 0 &&
-	   clients[enemigo].stats.getVida() <= 0){
+	   clients[enemigo].stats.getVida() <= 0)
+	{
 		msg.message = "\nHas empatado\n";
 		msg.type = MessageType::FINISH_GAME;
 		for(int i = 0; i < MAX_CLIENTS; i++)
@@ -503,7 +527,7 @@ void GameServer::manageCommand(Rol& rol, Socket* s)
 
 		return;
 	}
-	//Has ganadp
+	//Has ganado
 	else if(clients[enemigo].stats.getVida() <= 0)
 	{
 		msg.message = "\nHas ganado\n";
@@ -515,6 +539,90 @@ void GameServer::manageCommand(Rol& rol, Socket* s)
 
 		return;
 	}
+
+	//Si llega aquí es que ninguno ha muerto por el camino
+	//Informes de batalla
+	msg.type = MessageType::INIT_BATTLE;
+
+	for(int i = 0; i < MAX_CLIENTS; i++)
+	{
+		//Recarga de maná
+		clients[i].stats.reloadMana();
+
+		msg.message = "\nRonda terminada\n";
+		msg.message += "\nInforme enemigo: ";
+		if (i == 0){
+			msg.message += informeEnemigo(1);
+		}
+		else{
+			msg.message += informeEnemigo(0);
+		}
+		
+		msg.message += informe(i);	
+		
+		//Lista de comandos
+		msg.message += commands;
+		socket.send(msg, *clients[i].socket);
+	}	
+
+}
+
+void GameServer::manageBattle(const int& current, const int& enemigo)
+{	
+	//Procesando al último que envío el mensaje
+	//Si mitiga daño entonces no hace falta entrar aquí
+	if(clients[current].stats.getCommand() == "M") return;
+
+	if(clients[current].stats.getCommand() == "B")
+	{
+		std::cout << "\n" << clients[current].stats.getNick() << 
+			" ha hecho un ataque básico\n";
+		int pupa = clients[current].stats.getAtk();
+		//Si el enemigo mitiga daño
+		if(clients[enemigo].stats.getCommand() == "M")
+		{
+			int miti = (int)(pupa * m_dmg);
+			std::cout << "\n" << clients[current].stats.getNick() <<
+			       	" ha mitigado: " << miti << "\n";
+			pupa -= miti;
+		}
+
+		//Se le aplica el damage
+		clients[enemigo].stats.addVida(-pupa);
+	}
+	else if(clients[current].stats.getCommand()[0] == 'F')
+	{
+		//Formula del ataque fuerte: atk + atk * mana
+		int pupa = clients[current].stats.getAtk();
+		int mana = (int)(clients[current].stats.getCommand()[2] - '0');
+		pupa += pupa * mana;
+
+		std::cout << "\n" << clients[current].stats.getNick() <<
+		       	" ha hecho un ataque fuerte con maná: " << mana << "\n";
+		
+		//Se descuenta el maná
+		clients[current].stats.addMana(-mana);
+
+		//Si el enemigo mitiga daño
+		if(clients[enemigo].stats.getCommand() == "M")
+		{
+			int miti = (int)(pupa * m_dmg);
+			std::cout << "\n" << clients[current].stats.getNick() <<
+			       	" ha mitigado: " << miti << "\n";
+			pupa -= miti;
+		}
+
+		//Se le aplica el damage
+		clients[enemigo].stats.addVida(-pupa);
+	}
+}
+
+std::string GameServer::printRol(const RolType& t)
+{
+	std::string name;
+	if(t == RolType::GUERRERO) return name = "Guerrero ";
+	else if(t == RolType::ASESINO) return name = "Asesino ";
+	else return name = "Mago ";
 }
 
 std::string GameServer::informeEnemigo(const int& i)
@@ -522,15 +630,8 @@ std::string GameServer::informeEnemigo(const int& i)
 	//Rol
 	std::string msg;
 	msg += std::string("Rol: ");
-	if(clients[i].stats.getRol() == RolType::GUERRERO){
-		msg += std::string("Guerrero ");
-	}
-	else if(clients[i].stats.getRol() == RolType::ASESINO){
-		msg += std::string("Asesino ");
-	}
-	else if(clients[i].stats.getRol() == RolType::MAGO){
-		msg += std::string("Mago ");
-	}
+	msg += printRol(clients[i].stats.getRol());
+
 	//Vida
 	msg += std::string("Vida: ") + 
 		std::to_string(clients[i].stats.getVida());
@@ -539,8 +640,8 @@ std::string GameServer::informeEnemigo(const int& i)
 		std::to_string(clients[i].stats.getMana());
 	//Ataque
 	msg += std::string(" Ataque: ") + 
-		std::to_string(clients[i].stats.getVida());
-
+		std::to_string(clients[i].stats.getAtk());
+	
 	return msg;
 }
 
@@ -557,7 +658,13 @@ std::string GameServer::informe(const int& i)
 	//Ataque
 	msg += std::string("/ Ataque: ") +
 	       		std::to_string(clients[i].stats.getAtk());
+	
+	//Mana por ronda
+	msg += std::string("/ Maná por ronda: ") +
+		std::to_string(clients[i].stats.getManaR());
+
 	msg += std::string("\n");
+
 
 	return msg;
 }
@@ -690,23 +797,17 @@ void GameClient::input_thread()
 		switch(state){
 		case GameState::CHOOSEN:
 		{
-			//Si el jugador ya ha escogido rol
-			//Entonces será distinto a NONE, por tanto, 
-			//no debería volver a escoger
-			if(player->getRol() != RolType::NONE) 
-			{
-				std::cout << "\nYa se ha escogido Rol\n";
-				break;
-			}
 			chooseRol(msg);
-
 			break;
 		}
 		case GameState::BATTLE:
 			chooseAction(msg);
 			break;
 		case GameState::WAITING:
-			std::cout << "\nEspere mientras su rival elige su movimiento\n";
+			std::cout << "\nEsperando rival...\n";
+			break;
+		case GameState::FINISH:
+			chooseFinish(msg);
 			break;
 		}
 	}
@@ -724,21 +825,20 @@ void GameClient::net_thread()
 		 * Tipos de mensaje
 		 * 
 		 * LOGIN: Mostrará el mensaje de Bienvenida y pasará al estado
-		 * 
 		 * CHOOSEN para escoger el rol.
 		 * 
-		 * INIT_BATTLE: Mostrará el mensaje de que se ha encontrado rival 
-		 * junto a la información del estado de la batalla y se pasará al
+		 * ROLED: Muestra el mensaje del rol escogido y se pasa al estado WAITING
+		 * hasta que el rival escoja su rol.
+		 * 
+		 * INIT_BATTLE: Mostrará el estado actual del combate y se pasará al
 		 * estado de batalla BATTLE.
 		 *
 		 * COMMAND: Si recibe un mensaje de este tipo siginifica que el otro
 		 * jugador está escogiendo un comando, por tanto se pasa al estado
-		 * WAITING
+		 * WAITING.
 		 *
-		 * FINISH ROUND: Mostrará el informe de la ronda y la información
-		 * del estado del jugador . Se pasa al estado BATTLE.
-		 *
-		 * FINISH_GAME:  
+		 * FINISH_GAME: Muestra el mensaje del servidor sobre si se ha ganado,
+		 * empatado o perdido y se pasa al estado FINISH.  
 		 */	
 
 		//Mensaje del servidor
@@ -750,6 +850,8 @@ void GameClient::net_thread()
 			state = GameState::CHOOSEN;
 			break;
 		case MessageType::ROLED:
+			state = GameState::WAITING;
+			std::cout << "\nEsperando rival...\n";
 			break;
 		case MessageType::INIT_BATTLE:
 			std::cout << "\nEscriba un comando: \n";
@@ -758,11 +860,9 @@ void GameClient::net_thread()
 		case MessageType::COMMAND:
 			state = GameState::WAITING;
 			break;
-		case MessageType::FINISH_ROUND:
-			state = GameState::BATTLE;
-			break;
 		case MessageType::FINISH_GAME:
 			state = GameState::FINISH;
+			std::cout << "\nEscriba 'Y' si quiere volver a jugar y 'N' para desconectarse\n";
 			break;
 		case MessageType::LOGOUT:
 			std::cout << "EXIT TRUE\n";
@@ -817,7 +917,7 @@ void GameClient::chooseAction(const std::string& msg)
 	//En caso de escribir cualquiera de los 3 comandos de acción permitidos
 	//se procesan y se envían al servidor como MessageType::COMMAND
 	// Atk básico                 Atk fuerte               Rec Maná
-	if(msg == "B" || (msg[0] == 'F' && msg.size() <= 3) || msg == "M") 
+	if(msg == "B" || (msg[0] == 'F' && msg.size() == 3) || msg == "M") 
 	{
 		std::cout << "Comando: " << msg << "\n";
 		Rol rol(player, MessageType::COMMAND);
@@ -835,5 +935,25 @@ void GameClient::chooseAction(const std::string& msg)
 	else
 	{
 		std::cout << "No se reconoce el comando\n";
+	}
+}
+
+void GameClient::chooseFinish(const std::string& msg){
+	Socket* socket = player ->getSocket();
+	
+	//Volver a jugar
+	if(msg == "Y")
+	{
+		
+	}
+	//Salir
+	else if(msg == "N")
+	{
+		
+	}
+	else 
+	{
+		std::cout << "\nNo se reconoce el comando\n" << 
+			"'Y' para volver a jugar y 'N' para salir.\n";
 	}
 }
