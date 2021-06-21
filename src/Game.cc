@@ -387,7 +387,6 @@ void GameServer::manageRoled(const Rol& rol, Socket* s)
 	      	printRol(rol.getRol()) << "\n";
 	
 	GameMessage msg;
-	std::cout << "ROLED: " << roledPlayers << "\n";	
 	for(int i = 0; i < MAX_CLIENTS; i++)
 	{
 		//Cuando el jugador escoge rol, se guardan sus datos en el server
@@ -845,7 +844,6 @@ void GameClient::input_thread()
 {
 	while (!exit)
     	{
-		std::cout << "\nEsperando INPUT\n";
 		Socket* socket = player->getSocket();
 
 		std::string msg;	
@@ -931,7 +929,6 @@ void GameClient::net_thread()
 		}
     	}
 
-	std::cout << "\nDESCONEXION NET\n";
 	delete player;
 }
 
