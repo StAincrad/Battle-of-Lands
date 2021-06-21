@@ -84,25 +84,6 @@ enum class GameState
 #define A_ATK 25
 #define A_MR 2
 
-/**
- *  Estructura de la serialización del jugador
- *
- *  +-------------------------+
- *  | Tipo: uint8_t           | Tipo del mensaje
- *  +-------------------------+
- *  | Nick: char[NICK_S]      | Nick incluido el char terminación de cadena '\0'
- *  +-------------------------+
- *  |                         |
- *  | Mensaje: char[BUF_SIZE] | Mensaje enviado al servidor '\0'
- *  |                         |
- *  +-------------------------+
- *  |                         |
- *  | Rol: int * 3 + uint8_t  | Rol del jugador
- *  |                         |
- *  +-------------------------+
- *
- */
-
 /*
  * Clase de mensajería del rol elegido por el jugador.
  * Sirve para enviar toda la información que tiene guardada
@@ -240,7 +221,7 @@ private:
 	//Mensaje con los comandos del juego
 	std::string commands;
 	//Guarda el primer comando enviado en el estado de combate
-	std::string firstCommand;
+	std::string reroled;
 	//Array con los nicks de los jugadores
 	//para evitar coger el mismo
 	std::string nicks[MAX_CLIENTS];
@@ -248,21 +229,27 @@ private:
 	//--------METODOS-PRIVADOS------------//
 	
 	//Gestiona los mensajes de LOGIN
-	void manageLogin(Rol& rol, Socket* s);
+	void manageLogin(const Rol& rol, Socket* s);
 
 	//Gestiona los mensajes de ROLED
-	void manageRoled(Rol& rol, Socket* s);
+	void manageRoled(const Rol& rol, Socket* s);
 	
 	//Gestiona los mensajes de LOGOUT
-	void manageLogout(Rol& rol, Socket* s);
+	void manageLogout(const Rol& rol, Socket* s);
 
 	//Gestiona los comandos
-	void manageCommand(Rol& rol, Socket* s);
+	void manageCommand(const Rol& rol, Socket* s);
+
+	//Gestiona el reincio del juegi
+	void manageRestart(const Rol& rol, Socket* s);
 
 	//Gestiona la fase de combate en función de los comandos de los juagadores
 	//current -> jugador al que se le procesa el comando
 	//enemigo -> el otro jugador
 	void manageBattle(const int& current, const int& enemigo);
+
+	//Comprueba el estado de las vidas de los jugadores tras el combate
+	bool isFinished(const int& current, const int& enemigo);
 
 	//Devuelve el string del rol
 	std::string printRol(const RolType& t);
@@ -367,8 +354,6 @@ public:
 private:
 	//Controla el bucle de net_thread
 	bool exit;
-	//Controla el bucle de input_trhead
-	bool exit_i;
 
 	//Puntero a los datos del jugador
 	Player* player;

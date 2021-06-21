@@ -246,11 +246,14 @@ GameServer::GameServer(const char* s, const char* p) :
 	num_clientes(0)
 {
 	//Creación del mensaje de Bienvenida
+	reroled = std::string("Pulse 'G' para escoger Guerrero\n") +
+		std::string("Pulse 'M' para escoger Mago\n") +
+		std::string("Pulse 'A' para escoger Asesino\n") + 
+		std::string("Pulse 'S' para salir\n");
+
 	welcome = "¡Bienvenido a Battle of Lands!\n" +
 		std::string("Por favor, escoja un rol para luchar por su tierra\n") +
-		std::string("Pulse 'G' para escoger Guerrero\n") +
-		std::string("Pulse 'M' para escoger Mago\n") +
-		std::string("Pulse 'A' para escoger Asesino\n\0");
+		reroled;
 
 	commands = "\nLista de acciones -> Acción:Maná\n" +
 		std::string("Ataque básico -> B (no consume maná)\n") +
@@ -279,12 +282,24 @@ void GameServer::update()
 		 * En el server siempre se recibe un mensaje con características de rol,
 		 * de manera que en función del tipo de mensaje que contenga se harán unas
 		 * cosas u otras. 
+		 * 
 		 * LOGIN: Añade nuevos jugadores en caso de que haya hueco. Tras esto, se les envía
 		 * el mensaje de bienvenida para que escojan su rol.
-		 * LOGOUT: Elimina al jugador que se haya desconectado
+		 * 
+		 * LOGOUT: Elimina al jugador que se haya desconectado. Si queda otro jugador en el
+		 * servidor, entonces se le vuelve a preguntar por el rol
+		 * 
 		 * ROLED: Cuando el jugador escoja rol, si no todos han escogido, entonces simplemente
 		 * se le avisa al que haya elegido para que espere. Cuando los dos hayan elegido, se 
 		 * procede al gamestate de BATTLE.
+		 *
+		 * COMMAND: Recibe el comando del jugador en el estado de batlla, de manera que se 
+		 * procesan los comandos de ambos jugadores cuando se hayan mandado. Si solo uno ha
+		 * mandado el comando se le dirá que espere hasta que el contrincante decida.
+		 *
+		 * FINISH_GAME: Cuando el juego se ha terminado, los jugadores puedes salirse o volver
+		 * a jugar. Si vuelven a jugar la gestión se realiza mediante esta opción.
+		 *
 		 */
 		Rol rol;
 		Socket* s = nullptr;
@@ -302,6 +317,7 @@ void GameServer::update()
 			manageLogout(rol, s);
 			break;
 		case MessageType::FINISH_GAME:
+			manageRestart(rol, s);
 			break;
 		case MessageType::ROLED:
 			manageRoled(rol, s);
@@ -314,7 +330,7 @@ void GameServer::update()
 }
 
 //PRIVADOS
-void GameServer::manageLogin(Rol& rol, Socket *s)
+void GameServer::manageLogin(const Rol& rol, Socket *s)
 {
 	//Validez del login
 	if(num_clientes == MAX_CLIENTS){
@@ -322,20 +338,25 @@ void GameServer::manageLogin(Rol& rol, Socket *s)
 		msg.message = "\nNo hay hueco en el servidor\n";
 		msg.type = MessageType::LOGOUT;
 		socket.send(msg, *s);
+
+		//Liberación de socket
+		delete s;
 	       	return;
 	}
 	else if(rol.getNick() == nicks[0] ||
-			rol.getNick() == nicks[1])
+		rol.getNick() == nicks[1])
 	{
 		GameMessage msg;
 		msg.message = "\n El nombre " + std::string(rol.getNick()) +
 			std::string(" no es válido.");
 		msg.type = MessageType::LOGOUT;
 		socket.send(msg, *s);
+
+		delete s;
 		return;
 	}
 
-	//Se añade el nuevo socket al vector de clientes
+	//Añadiendo al nuevo cliente
 	std::cout << "\n" << rol.getNick() << " ha entrado en el juego\n";
 	
 	//Mensaje de bienvenida
@@ -359,14 +380,14 @@ void GameServer::manageLogin(Rol& rol, Socket *s)
 	num_clientes++;
 }
 
-void GameServer::manageRoled(Rol& rol, Socket* s)
+void GameServer::manageRoled(const Rol& rol, Socket* s)
 {
 	//El mensaje siempre será de GameMessage
 	std::cout << rol.getNick() << " ha escogido " <<
 	      	printRol(rol.getRol()) << "\n";
 	
 	GameMessage msg;
-	
+	std::cout << "ROLED: " << roledPlayers << "\n";	
 	for(int i = 0; i < MAX_CLIENTS; i++)
 	{
 		//Cuando el jugador escoge rol, se guardan sus datos en el server
@@ -416,41 +437,50 @@ void GameServer::manageRoled(Rol& rol, Socket* s)
 		msg.message += commands;
 		socket.send(msg, *clients[i].socket);
 	}	
-
-	roledPlayers = 0;
 }
 
-void GameServer::manageLogout(Rol& rol, Socket* s)
+void GameServer::manageLogout(const Rol& rol, Socket* s)
 {
+	roledPlayers = 0;
 	int i = 0;
 	for(; i < MAX_CLIENTS; i++){
 		if(clients[i].stats.getNick() == rol.getNick())
 		{
 			num_clientes--;
 			clients[i].used = false;
-			std::cout << "CLIENT FALSE\n";
-
+				
 			//Mensaje de despedida
 			GameMessage msg;
 			msg.type = MessageType::LOGOUT;
-			msg.message = "Hasta la vida\n";
 			socket.send(msg, *clients[i].socket);
-			
-			std::cout << "ENVIO DE LOGOUT\n";
+
 			//Liberación del socket
+			Socket* aux = clients[i].socket.release();
 			clients[i].socket = nullptr;
-			std::cout << "LIBERACION DE SOCKET\n";
-			
+			delete aux;
+
 			break;
 		}
 	}
+	
+	//Si aún queda otro cliente en el servidor esperamos
+	if(num_clientes != 0){
+		int j = 0;
+		//Si i es 0 entonces 1 sigue jugando
+		//Si i es 1 entonces 0 sigue jugando
+		if(i == 0) j = 1;
 
-	if(i == MAX_CLIENTS){
-		std::cout << "El jugador ya se había desconectado previamente\n";
+		GameMessage msg;
+		msg.message = "\nEl contrincante " + nicks[i] + std::string(" se ha desconectado\n") +
+			std::string("Vuelva a elegir Rol\n"); 
+		msg.message += reroled;
+		msg.type = MessageType::LOGIN;
+		nicks[i] = "none";
+		socket.send(msg, *clients[j].socket);
 	}
 }
 
-void GameServer::manageCommand(Rol& rol, Socket* s)
+void GameServer::manageCommand(const Rol& rol, Socket* s)
 {
 	int i = 0;
 
@@ -502,43 +532,8 @@ void GameServer::manageCommand(Rol& rol, Socket* s)
 	num_commands = 0;
 
 	//Comprobación de vidas
-	//Empate
-	if(clients[i].stats.getVida() <= 0 &&
-	   clients[enemigo].stats.getVida() <= 0)
-	{
-		msg.message = "\nHas empatado\n";
-		msg.type = MessageType::FINISH_GAME;
-		for(int i = 0; i < MAX_CLIENTS; i++)
-		{
-			socket.send(msg, *clients[i].socket);
-		}
+	if(isFinished(i, enemigo)) return;
 
-		return;
-	}
-	//Ha ganado el otro
-	else if(clients[i].stats.getVida() <= 0)
-	{
-		msg.message = "\nHas ganado\n";
-		msg.type = MessageType::FINISH_GAME;
-		socket.send(msg, *clients[enemigo].socket);
-
-		msg.message = "\nHas perdido\n";
-		socket.send(msg, *clients[i].socket);
-
-		return;
-	}
-	//Has ganado
-	else if(clients[enemigo].stats.getVida() <= 0)
-	{
-		msg.message = "\nHas ganado\n";
-		msg.type = MessageType::FINISH_GAME;
-		socket.send(msg, *clients[i].socket);
-
-		msg.message = "\nHas perdido\n";
-		socket.send(msg, *clients[enemigo].socket);
-
-		return;
-	}
 
 	//Si llega aquí es que ninguno ha muerto por el camino
 	//Informes de batalla
@@ -565,6 +560,24 @@ void GameServer::manageCommand(Rol& rol, Socket* s)
 		socket.send(msg, *clients[i].socket);
 	}	
 
+}
+
+void GameServer::manageRestart(const Rol& rol, Socket* s)
+{
+	//Se busca al cliente que ha reiniciado y se le vuelve a preguntar por su rol
+	for(int i = 0; i < MAX_CLIENTS; i++)
+	{
+		if(clients[i].used && rol.getNick() == clients[i].stats.getNick())
+		{
+			GameMessage msg;
+			msg.message = std::string("Vuelva a elegir Rol\n") + reroled;
+		
+			msg.type = MessageType::LOGIN;
+			socket.send(msg, *clients[i].socket);
+
+			break;
+		}
+	}
 }
 
 void GameServer::manageBattle(const int& current, const int& enemigo)
@@ -615,6 +628,51 @@ void GameServer::manageBattle(const int& current, const int& enemigo)
 		//Se le aplica el damage
 		clients[enemigo].stats.addVida(-pupa);
 	}
+}
+
+bool GameServer::isFinished(const int& current, const int& enemigo){
+       	GameMessage msg;
+	bool fin = false;
+
+	//Empate
+	if(clients[current].stats.getVida() <= 0 &&
+	   clients[enemigo].stats.getVida() <= 0)
+	{
+		msg.message = "\nHas empatado\n";
+		msg.type = MessageType::FINISH_GAME;
+		for(int i = 0; i < MAX_CLIENTS; i++)
+		{
+			socket.send(msg, *clients[i].socket);
+		}
+
+		return true;
+	}
+	//Ha ganado el otro
+	else if(clients[current].stats.getVida() <= 0)
+	{
+		msg.message = "\nHas ganado\n";
+		msg.type = MessageType::FINISH_GAME;
+		socket.send(msg, *clients[enemigo].socket);
+
+		msg.message = "\nHas perdido\n";
+		socket.send(msg, *clients[current].socket);
+
+		return true;
+	}
+	//Has ganado
+	else if(clients[enemigo].stats.getVida() <= 0)
+	{
+		msg.message = "\nHas ganado\n";
+		msg.type = MessageType::FINISH_GAME;
+		socket.send(msg, *clients[current].socket);
+
+		msg.message = "\nHas perdido\n";
+		socket.send(msg, *clients[enemigo].socket);
+
+		return true;
+	}
+
+	return false;
 }
 
 std::string GameServer::printRol(const RolType& t)
@@ -703,8 +761,6 @@ void Player::logout()
 	if(send == -1){
 		std::cerr << "Error en LOGOUT\n";
 	}
-
-	std::cout << "LOGOUT ENVIADO\n";
 }
 
 void Player::setRolType(RolType rt)
@@ -767,11 +823,11 @@ Socket* Player::getSocket()
 {
 	return &socket;
 }
+
 //--------Clase-GameClient-------------//
 
 GameClient::GameClient(const char* s, const char* p, const char* n) : 
-	exit(false),
-	exit_i(false)
+	exit(false)
 {
 	//Creación del player en el juego del cliente
 	player = new Player(s, p, n);
@@ -787,13 +843,17 @@ void GameClient::login(){
 
 void GameClient::input_thread()
 {
-	while (!exit_i)
+	while (!exit)
     	{
+		std::cout << "\nEsperando INPUT\n";
 		Socket* socket = player->getSocket();
 
 		std::string msg;	
 		std::getline(std::cin, msg);
 		
+		//Salida de seguridad
+		if(exit) continue;
+
 		switch(state){
 		case GameState::CHOOSEN:
 		{
@@ -815,7 +875,7 @@ void GameClient::input_thread()
 
 void GameClient::net_thread()
 {
-    	while(!exit_i)
+    	while(!exit)
     	{
 		GameMessage m;
 		player->getSocket()->recv(m);
@@ -865,15 +925,14 @@ void GameClient::net_thread()
 			std::cout << "\nEscriba 'Y' si quiere volver a jugar y 'N' para desconectarse\n";
 			break;
 		case MessageType::LOGOUT:
-			std::cout << "EXIT TRUE\n";
+			std::cout << "Bye bye!\n";
 			exit = true;
-			Socket * delS = player->getSocket();
-			delS->finish();
-
-			delete player;
 			break;
 		}
     	}
+
+	std::cout << "\nDESCONEXION NET\n";
+	delete player;
 }
 
 //PRIVADOS
@@ -904,6 +963,11 @@ void GameClient::chooseRol(const std::string& msg)
 		int s = socket->send(asesino, *socket);
 		if(s == -1) std::cerr << "Error en el envío del mensaje ROL\n";
 	}
+	else if(msg == "S")
+	{
+		exit = true;
+		player->logout();
+	}
 	else
 	{
 		std::cout << "No se reconoce el comando: " << msg <<
@@ -929,7 +993,7 @@ void GameClient::chooseAction(const std::string& msg)
 	}	
 	else if(msg == "S")	//Salir
 	{
-		exit_i = true;
+		exit = true;
 		player->logout();
 	}
 	else
@@ -944,12 +1008,14 @@ void GameClient::chooseFinish(const std::string& msg){
 	//Volver a jugar
 	if(msg == "Y")
 	{
-		
+		Rol rol = Rol(player, MessageType::FINISH_GAME);
+		int s = socket->send(rol, *socket);		
 	}
 	//Salir
 	else if(msg == "N")
 	{
-		
+		exit = true;
+		player->logout();
 	}
 	else 
 	{
